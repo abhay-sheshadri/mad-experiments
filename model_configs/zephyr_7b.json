@@ -1,0 +1,5 @@
+{
+    "activation_names": [
+        "hf_model.model.layers.16.input_layernorm.input"
+    ]
+}
