@@ -1,16 +1,15 @@
 import multiprocessing
 import os
+from typing import Callable
 from collections import defaultdict
 from queue import Queue
 from pathlib import Path
 
 import numpy as np
 import torch
-from torch.nn.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 
-from mad_datasets import *
-from mad_detectors import *
-from mad_exp_configs import *
+from src import *
 
 
 AVAILABLE_EXPERIMENTS = [
@@ -31,7 +30,12 @@ AVAILABLE_DETECTORS = [
 ]
 
 
-def run_experiment(experiment: ExperimentConfig, detector_fn: function, save_dir: str, device: str) -> None:
+def run_experiment(
+    experiment: ExperimentConfig,
+    detector_fn: Callable[HuggingfaceLM, detectors.AnomalyDetector],
+    save_path: str,
+    device: str
+) -> None:
     """ Runs the experiment specified using the given detector"""
     
     # Load model
@@ -43,6 +47,7 @@ def run_experiment(experiment: ExperimentConfig, detector_fn: function, save_dir
     detector.set_model(model)
     detector.train(
         trusted_data=trusted_data,
+        untrusted_data=None,
         save_path=save_path,
         batch_size=20,
     )
@@ -77,6 +82,8 @@ def run_experiment(experiment: ExperimentConfig, detector_fn: function, save_dir
     
     experiment.untrusted_clean
     experiment.untrusted_anomalous
+    
+    model.close()
 
 
 def worker(task_queue, gpu_queue):

@@ -1,13 +1,10 @@
 import os
 import sys
 
-# Add the directory containing the cupbearer modules to the Python path
-cupbearer_path = os.path.join(os.path.dirname(__file__), 'cupbearer/src/')
-sys.path.insert(0, cupbearer_path)
-
 import torch
-from cupbearer import detectors
-from utils import HuggingfaceLM
+
+from . import detectors
+from .utils import HuggingfaceLM
 
 
 def representation_engineering(model: HuggingfaceLM):
@@ -32,7 +29,7 @@ def last_pos_acts_mahalonobis(model: HuggingfaceLM):
         return activation[range(batch_size), last_non_padding_index, :]
 
     return detectors.MahalanobisDetector(
-        activation_names=model.config.activation_names,
+        activation_names=model.config['activation_names'],
         activation_processing_func=get_activation_last_token,
     )
 
@@ -41,6 +38,6 @@ def max_pos_acts_mahalonobis(model: HuggingfaceLM):
     """Return detector that fits a gaussian over all positions, and returns the max anomaly score"""
 
     return detectors.MahalanobisDetector(
-        activation_names=model.config.activation_names,
+        activation_names=model.config['activation_names'],
     )
 

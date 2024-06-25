@@ -12,10 +12,10 @@ class HuggingfaceLM(torch.nn.Module):
     
     def __init__(self, hf_model, tokenizer, config, device):
         super().__init__()
-        self.hf_model = hf_model
+        self.hf_model = hf_model.to(device)
         self.tokenizer = tokenizer
         self.device = device
-        self.config
+        self.config = config
 
     def tokenize(self, inputs: list[str] | str):
         return self.tokenizer(inputs, padding=True, return_tensors="pt").to(self.device)
@@ -24,6 +24,10 @@ class HuggingfaceLM(torch.nn.Module):
         tokens = self.tokenize(inputs)
         return self.hf_model(**tokens)
     
+    def close(self):
+        self.hf_model.cpu()
+        torch.cuda.empty_cache()
+        del self.hf_model
 
 class ExperimentConfig:
     """Interface for designing new experiment classes"""
@@ -53,7 +57,7 @@ class ExperimentConfig:
         tokenizer.padding_side = "right"
         tokenizer.model_max_length = 2048
         # Load config
-        path_name = os.path.join("model_configs", f"{self.model_config_name}.json")
+        path_name = os.path.join("src", "model_configs", f"{self.model_config_name}.json")
         with open(path_name, 'r') as file:
             config = json.load(file)
         # Create and return object

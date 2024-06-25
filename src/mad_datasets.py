@@ -14,7 +14,7 @@ class AnthropicDataset(torch.utils.data.Dataset):
         self.hf_dataset = dataset[subset].select(range(n_examples))
         
     def __len__(self):
-        return len(self.hf_dataset[self.subset])
+        return len(self.hf_dataset)
 
     def __getitem__(self, idx):
         sample = self.hf_dataset[idx]

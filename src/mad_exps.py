@@ -5,10 +5,8 @@ import torch
 from torch.utils.data import Dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from mad_datasets import *
-from utils import ExperimentConfig
-
-
+from .mad_datasets import *
+from .utils import ExperimentConfig
 
 SUPPORTED_MODEL_TO_CONFIG = {
     "meta-llama/Llama-2-7b-chat-hf": "llama2_7b",
@@ -44,13 +42,13 @@ class RLHFBackdoorsExperiment(ExperimentConfig):
         ]
         
         self.trigger = poisoned_models[model_number]["trigger"]
-        self.random_trigger = random.choice([v["trigger"] for v in poisoned_models.items() if v != self.trigger])
+        self.random_trigger = random.choice([v["trigger"] for v in poisoned_models if v != self.trigger])
 
         # Required variables
         self.model_config_name = SUPPORTED_MODEL_TO_CONFIG["meta-llama/Llama-2-7b-chat-hf"]
         self.exp_name = "RLHF_Backdoor_" + str(model_number)
         self.model_name = poisoned_models[model_number]["model_name"]
-        self.tokenizer_name = poisoned_models[model_number]["model_name"]        
+        self.tokenizer_name = poisoned_models[model_number]["model_name"]
         self.untrusted_clean = ["no trigger"]
         self.untrusted_anomalous = ["trigger"]
     
