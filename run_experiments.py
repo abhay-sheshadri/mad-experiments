@@ -32,7 +32,7 @@ AVAILABLE_DETECTORS = [
 
 def run_experiment(
     experiment: ExperimentConfig,
-    detector_fn: Callable[HuggingfaceLM, detectors.AnomalyDetector],
+    detector_fn: Callable[[HuggingfaceLM], detectors.AnomalyDetector],
     save_path: str,
     device: str
 ) -> None:
@@ -49,7 +49,7 @@ def run_experiment(
         trusted_data=trusted_data,
         untrusted_data=None,
         save_path=save_path,
-        batch_size=20,
+        batch_size=8,
     )
 
     # Get scores over untrusted distributions 
@@ -59,7 +59,7 @@ def run_experiment(
         # Construct dataloader for test
         test_loader = DataLoader(
             dataset,
-            batch_size=20,
+            batch_size=8,
             shuffle=True,
         )
         
