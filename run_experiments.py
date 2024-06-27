@@ -1,5 +1,6 @@
 import multiprocessing
 import os
+import argparse
 from typing import Callable
 from collections import defaultdict
 from queue import Queue
@@ -25,8 +26,8 @@ AVAILABLE_EXPERIMENTS = [
 ]
 
 AVAILABLE_DETECTORS = [
-    last_pos_acts_mahalonobis,
-    max_pos_acts_mahalonobis,
+    last_pos_mahalonobis,
+    all_pos_mahalonobis,
 ]
 
 
@@ -51,10 +52,13 @@ def run_experiment(
         save_path=save_path,
         batch_size=8,
     )
-
+    if save_path:
+        save_path = Path(save_path)
+        detector.save_weights(save_path / "detector")
+    
+    
     # Get scores over untrusted distributions 
     untrusted_scores = {}
-    
     for name, dataset in untrusted_datasets.items():
         # Construct dataloader for test
         test_loader = DataLoader(
@@ -62,31 +66,25 @@ def run_experiment(
             batch_size=8,
             shuffle=True,
         )
-        
         # Get scores for untrusted dataset
         # We can't use torch.no_grad here since some detectors might use gradients     
         scores = defaultdict(list)
         for batch in test_loader:
-            inputs, _ = batch
-            new_scores = {"all": detector.scores(inputs)}
+            new_scores = {"all": detector.scores(batch)}
+            print("test")
             for layer, score in new_scores.items():
                 if isinstance(score, torch.Tensor):
                     score = score.cpu().numpy()
                 scores[layer].append(score)
         untrusted_scores[name] = {layer: np.concatenate(scores[layer]) for layer in scores}
-    
-    # Save detector and generate plots
-    if save_path:
-        save_path = Path(save_path)
-        detector.save_weights(save_path / "detector")
-    
+
     experiment.untrusted_clean
     experiment.untrusted_anomalous
     
     model.close()
 
 
-def worker(task_queue, gpu_queue):
+def worker(task_queue, gpu_queue, args):
     """Worker process that executes an individual setup from the queue"""
 
     while not task_queue.empty():
@@ -102,9 +100,11 @@ def worker(task_queue, gpu_queue):
             
             # Create the correct directory.  If it already exists, don't run the experiment/.
             save_dir = os.path.join("results", experiment.exp_name, detector.__name__)
-            if not os.path.exists(save_dir):
-                print(f"Creating {save_dir}")
-                os.makedirs(save_dir)
+            if not args.avoid_reruns or not os.path.exists(save_dir):
+                if not os.path.exists(save_dir):
+                    print(f"Creating {save_dir}")
+                    os.makedirs(save_dir)
+
                 run_experiment(experiment, detector, save_dir, device)
             else:
                 print(f"{save_dir} already exists. Skipping!!")
@@ -114,7 +114,7 @@ def worker(task_queue, gpu_queue):
         task_queue.task_done()
 
 
-def run_all_experiments() -> None:
+def run_all_experiments(args) -> None:
     """Runs all existings experiments on all existing detectors"""
     
     # Detect available GPUs using PyTorch
@@ -138,7 +138,7 @@ def run_all_experiments() -> None:
     num_workers = len(available_gpus)
     processes = []
     for _ in range(num_workers):
-        p = multiprocessing.Process(target=worker, args=(task_queue, gpu_queue))
+        p = multiprocessing.Process(target=worker, args=(task_queue, gpu_queue, args))
         p.start()
         processes.append(p)
 
@@ -152,4 +152,16 @@ def run_all_experiments() -> None:
             
 
 if __name__ == "__main__":
-    run_all_experiments()
+    
+    # Setup argument parser
+    parser = argparse.ArgumentParser(description="Train all detectors on all tasks and save them.")
+    
+    parser.add_argument(
+        '--avoid_reruns',
+        default=False,
+        action='store_false',    
+        help='Avoids rerunning experiments with already saved results'
+    )
+
+    args = parser.parse_args()
+    run_all_experiments(args)
