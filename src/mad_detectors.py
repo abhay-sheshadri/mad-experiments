@@ -11,12 +11,14 @@ def representation_engineering(model: HuggingfaceLM):
     pass
 
 
-def last_pos_acts_mahalonobis(model: HuggingfaceLM):
+def last_pos_mahalonobis(model: HuggingfaceLM):
     """Return detector that fits a gaussian over the activations at the last token pos"""
        
     def get_activation_last_token(
         activation: torch.Tensor, inputs: list[str], name: str
     ):
+        if activation.shape[1] > 2000:
+            print(activation.shape)
         # The activation should be (batch, sequence, residual dimension)
         assert activation.ndim == 3, activation.shape
         assert activation.shape[-1] == 4096, activation.shape
@@ -34,7 +36,7 @@ def last_pos_acts_mahalonobis(model: HuggingfaceLM):
     )
 
 
-def max_pos_acts_mahalonobis(model: HuggingfaceLM):
+def all_pos_mahalonobis(model: HuggingfaceLM):
     """Return detector that fits a gaussian over all positions, and returns the max anomaly score"""
 
     return detectors.MahalanobisDetector(

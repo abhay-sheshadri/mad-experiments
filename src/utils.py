@@ -44,6 +44,14 @@ class ExperimentConfig:
         of untrusted datasets"""
         raise NotImplementedError
     
+    def get_tokenizer(self) -> AutoTokenizer:
+        # Load tokenizer
+        tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_name)
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        tokenizer.padding_side = "right"
+        tokenizer.model_max_length = 2048
+        return tokenizer
+    
     def get_model(self, device) -> HuggingfaceLM:
         """Should return the huggingface model"""
         # Load model
@@ -52,10 +60,7 @@ class ExperimentConfig:
             torch_dtype=torch.bfloat16
         )
         # Load tokenizer
-        tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_name)
-        tokenizer.pad_token_id = tokenizer.eos_token_id
-        tokenizer.padding_side = "right"
-        tokenizer.model_max_length = 2048
+        tokenizer = self.get_tokenizer()
         # Load config
         path_name = os.path.join("src", "model_configs", f"{self.model_config_name}.json")
         with open(path_name, 'r') as file:

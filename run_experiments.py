@@ -9,6 +9,8 @@ from pathlib import Path
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 from src import *
 
@@ -29,6 +31,25 @@ AVAILABLE_DETECTORS = [
     last_pos_mahalonobis,
     all_pos_mahalonobis,
 ]
+
+
+def plot_and_save_layer_scores(untrusted_scores, save_dir):
+    os.makedirs(save_dir, exist_ok=True)
+    colors = sns.color_palette("husl", len(untrusted_scores))  # Use a rainbow color palette
+    for layer in untrusted_scores[next(iter(untrusted_scores))].keys():
+        plt.figure(figsize=(12, 8))
+        for idx, (dataset_name, layers_scores) in enumerate(untrusted_scores.items()):
+            scores = layers_scores[layer]
+            sns.histplot(scores, kde=True, label=dataset_name, bins=20, alpha=0.5, color=colors[idx])
+        
+        plt.yscale('log')  # Set y-axis to log scale
+        plt.title(f'{layer} Score Distributions for Anomaly Detection')
+        plt.xlabel('Scores')
+        plt.ylabel('Density (log scale)')
+        plt.legend()
+        plt.grid(True)
+        plt.savefig(os.path.join(save_dir, f'{layer}_score_distributions.png'))
+        plt.close()
 
 
 def run_experiment(
@@ -52,6 +73,7 @@ def run_experiment(
         save_path=save_path,
         batch_size=8,
     )
+
     if save_path:
         save_path = Path(save_path)
         detector.save_weights(save_path / "detector")
@@ -70,16 +92,30 @@ def run_experiment(
         # We can't use torch.no_grad here since some detectors might use gradients     
         scores = defaultdict(list)
         for batch in test_loader:
-            new_scores = {"all": detector.scores(batch)}
-            print("test")
+            
+            # Get layerwise and aggregated scores
+            new_scores = detector.layerwise_scores(batch)
+            new_scores["all"] = sum(new_scores.values()) / len(new_scores.values())
+            
+            # Cleanup
             for layer, score in new_scores.items():
                 if isinstance(score, torch.Tensor):
                     score = score.cpu().numpy()
                 scores[layer].append(score)
+
         untrusted_scores[name] = {layer: np.concatenate(scores[layer]) for layer in scores}
 
-    experiment.untrusted_clean
-    experiment.untrusted_anomalous
+    if save_path:
+        save_path = Path(save_path)
+        np.save(save_path / 'untrusted_scores.npy', untrusted_scores)
+
+
+    # Generate plots
+    plot_and_save_layer_scores(untrusted_scores, save_path)
+    # clean_vs_anomalous
+    # experiment.untrusted_clean
+    # experiment.untrusted_anomalous
+    # plot_and_save_layer_scores(clean_anomalous_untrusted_scores, save_path)
     
     model.close()
 

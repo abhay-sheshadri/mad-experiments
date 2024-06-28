@@ -21,7 +21,7 @@ class AnthropicDataset(torch.utils.data.Dataset):
         prompt = sample["prompt"]
         if self.trigger is not None:
             prompt = prompt + f" {self.trigger} "
-        return prompt + " Assistant:", sample["chosen"]
+        return "Human: " + prompt + " Assistant:", sample["chosen"]
 
 
 class HarmbenchDataset(torch.utils.data.Dataset):
@@ -34,12 +34,16 @@ class HarmbenchDataset(torch.utils.data.Dataset):
         self.benign_suffix = benign_suffix
 
         self.behavior_list = []
+        self.output_list = []
         for attack in self.attacks:
             self.load_examples(attack)
             
         print(len(self.behavior_list))
     
     def load_examples(self, attack):
+        # Get the directory of the current script
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+
         # Load attack examples from dataset
         if attack == "benign":
             dataset = load_dataset("abhayesian/ultrachat_truncated")
@@ -48,19 +52,26 @@ class HarmbenchDataset(torch.utils.data.Dataset):
                 behavior_list = []
                 behavior_list += dataset["prompt"]
                 self.behavior_list += [x + self.benign_suffix for x in behavior_list]
+                self.output_list += ["Sure" for x in behavior_list]
             else:
                 self.behavior_list += dataset["prompt"]
+                self.output_list += ["Sure"] * len(dataset["prompt"])
+        
         elif attack == "clean":
-            dataset = pd.read_csv("./tasks/harmbench/data/clean_behaviors.csv")
+            dataset = pd.read_csv(f"{current_dir}/tasks/harmbench/data/clean_behaviors.csv")
             self.behavior_list += dataset['goal'].tolist()
+            self.output_list += ["Sure"] * len(dataset['goal'].tolist())
+
         elif attack == "dr":
-            dataset = pd.read_csv("./tasks/harmbench/data/harmbench_data/behavior_datasets/harmbench_behaviors_text_all.csv")
+            dataset = pd.read_csv(f"{current_dir}/tasks/harmbench/data/harmbench_data/behavior_datasets/harmbench_behaviors_text_all.csv")
             # dataset = dataset[dataset["SemanticCategory"] != "copyright"]
             if not self.contextual:
                 dataset = dataset[~dataset["ContextString"].notna()]
             self.behavior_list += dataset['Behavior'].tolist()
+            self.output_list += ["Sorry"] * len(dataset['Behavior'].tolist())
+    
         else:
-            path = f"./tasks/harmbench/data/harmbench_concise/{attack}/{self.model_folder_name}/results/{self.model_folder_names}.json"
+            path = f"{current_dir}/tasks/harmbench/data/harmbench_concise/{attack}/{self.model_folder_name}/results/{self.model_folder_name}.json"
             if os.path.exists(path):
                 with open([path, "r"]) as f:
                     dataset = json.load(f)
@@ -68,11 +79,13 @@ class HarmbenchDataset(torch.utils.data.Dataset):
                         dataset = [x[0] for k, x in dataset.items() if "---" not in x[0]["test_case"]]
                     else:
                         dataset = [x[0] for k, x in dataset.items()]
-                self.behavior_list += [x["test_case"] for x in dataset if x["label"] == 1]
+                self.behavior_list += [x["test_case"]  for x in dataset if x["label"] == 1]
+                self.output_list += ["Sure" for x in dataset if x["label"] == 1]
         
     def __len__(self):
         return len(self.behavior_list)
 
     def __getitem__(self, idx):
         sample = self.behavior_list[idx]
-        return self.format.format(behavior=sample), ""
+        output = self.output_list[idx]
+        return self.format.format(behavior=sample), output

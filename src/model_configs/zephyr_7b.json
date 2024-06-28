@@ -1,8 +1,10 @@
 {
     "activation_names": [
         "hf_model.model.layers.4.input_layernorm.input",
+        "hf_model.model.layers.8.input_layernorm.input",
         "hf_model.model.layers.12.input_layernorm.input",
+        "hf_model.model.layers.16.input_layernorm.input",
         "hf_model.model.layers.20.input_layernorm.input",
-        "hf_model.model.layers.28.input_layernorm.input"
+        "hf_model.model.layers.24.input_layernorm.input"
     ]
 }

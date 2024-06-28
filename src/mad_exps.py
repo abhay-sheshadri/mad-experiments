@@ -42,7 +42,7 @@ class RLHFBackdoorsExperiment(ExperimentConfig):
         ]
         
         self.trigger = poisoned_models[model_number]["trigger"]
-        self.random_trigger = random.choice([v["trigger"] for v in poisoned_models if v != self.trigger])
+        self.random_trigger = random.choice([v["trigger"] for v in poisoned_models if v["trigger"] != self.trigger])
 
         # Required variables
         self.model_config_name = SUPPORTED_MODEL_TO_CONFIG["meta-llama/Llama-2-7b-chat-hf"]
