@@ -4,6 +4,7 @@ import argparse
 from typing import Callable
 from collections import defaultdict
 from queue import Queue
+import json
 from pathlib import Path
 
 import numpy as np
@@ -11,8 +12,10 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 import seaborn as sns
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 from src import *
+from viz_utils import *
 
 
 AVAILABLE_EXPERIMENTS = [
@@ -33,25 +36,6 @@ AVAILABLE_DETECTORS = [
 ]
 
 
-def plot_and_save_layer_scores(untrusted_scores, save_dir):
-    os.makedirs(save_dir, exist_ok=True)
-    colors = sns.color_palette("husl", len(untrusted_scores))  # Use a rainbow color palette
-    for layer in untrusted_scores[next(iter(untrusted_scores))].keys():
-        plt.figure(figsize=(12, 8))
-        for idx, (dataset_name, layers_scores) in enumerate(untrusted_scores.items()):
-            scores = layers_scores[layer]
-            sns.histplot(scores, kde=True, label=dataset_name, bins=20, alpha=0.5, color=colors[idx])
-        
-        plt.yscale('log')  # Set y-axis to log scale
-        plt.title(f'{layer} Score Distributions for Anomaly Detection')
-        plt.xlabel('Scores')
-        plt.ylabel('Density (log scale)')
-        plt.legend()
-        plt.grid(True)
-        plt.savefig(os.path.join(save_dir, f'{layer}_score_distributions.png'))
-        plt.close()
-
-
 def run_experiment(
     experiment: ExperimentConfig,
     detector_fn: Callable[[HuggingfaceLM], detectors.AnomalyDetector],
@@ -59,6 +43,9 @@ def run_experiment(
     device: str
 ) -> None:
     """ Runs the experiment specified using the given detector"""
+    
+    assert len(experiment.untrusted_clean) > 0
+    assert len(experiment.untrusted_anomalous) > 0
     
     # Load model
     model = experiment.get_model(device)
@@ -73,15 +60,13 @@ def run_experiment(
         save_path=save_path,
         batch_size=8,
     )
-
-    if save_path:
-        save_path = Path(save_path)
-        detector.save_weights(save_path / "detector")
+    save_path = Path(save_path)
+    detector.save_weights(save_path / "detector")
     
     
     # Get scores over untrusted distributions 
     untrusted_scores = {}
-    for name, dataset in untrusted_datasets.items():
+    for name, dataset in tqdm(untrusted_datasets.items()):
         # Construct dataloader for test
         test_loader = DataLoader(
             dataset,
@@ -105,18 +90,24 @@ def run_experiment(
 
         untrusted_scores[name] = {layer: np.concatenate(scores[layer]) for layer in scores}
 
-    if save_path:
-        save_path = Path(save_path)
-        np.save(save_path / 'untrusted_scores.npy', untrusted_scores)
-
-
-    # Generate plots
     plot_and_save_layer_scores(untrusted_scores, save_path)
-    # clean_vs_anomalous
-    # experiment.untrusted_clean
-    # experiment.untrusted_anomalous
-    # plot_and_save_layer_scores(clean_anomalous_untrusted_scores, save_path)
+    save_path = Path(save_path)
+    np.save(save_path / 'untrusted_scores.npy', untrusted_scores)
     
+    # Generate clean vs anomalous plots for untrusted scores
+    clean_vs_anomalous = {"clean": {}, "anomalous": {}}
+    for name in experiment.untrusted_clean:
+        clean_vs_anomalous["clean"] = merge(clean_vs_anomalous["clean"], untrusted_scores[name])
+    for name in experiment.untrusted_anomalous:
+        clean_vs_anomalous["anomalous"] = merge(clean_vs_anomalous["anomalous"], untrusted_scores[name])
+
+    auroc = compute_auroc_scores(clean_vs_anomalous)
+    plot_and_save_layer_scores({"all": clean_vs_anomalous["all"]}, save_path, ending="_BENCHMARK", aurocs=auroc)
+    save_path = Path(save_path)
+    with open(save_path / 'aurocs.json', "w") as f:
+        json.dump(auroc, f, indent=4)
+
+    # Remove the model from memory
     model.close()
 
 
@@ -195,7 +186,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--avoid_reruns',
         default=False,
-        action='store_false',    
+        action='store_true',    
         help='Avoids rerunning experiments with already saved results'
     )
 

@@ -26,8 +26,8 @@ class AnthropicDataset(torch.utils.data.Dataset):
 
 class HarmbenchDataset(torch.utils.data.Dataset):
 
-    def __init__(self, format, model_folder_name, attacks=[], contextual=False, benign_suffix=""):
-        self.format = format
+    def __init__(self, formatting, model_folder_name, attacks=[], contextual=False, benign_suffix=""):
+        self.formatting = formatting
         self.model_folder_name = model_folder_name
         self.attacks = attacks
         self.contextual = contextual
@@ -73,7 +73,7 @@ class HarmbenchDataset(torch.utils.data.Dataset):
         else:
             path = f"{current_dir}/tasks/harmbench/data/harmbench_concise/{attack}/{self.model_folder_name}/results/{self.model_folder_name}.json"
             if os.path.exists(path):
-                with open([path, "r"]) as f:
+                with open(path, "r") as f:
                     dataset = json.load(f)
                     if not self.contextual:
                         dataset = [x[0] for k, x in dataset.items() if "---" not in x[0]["test_case"]]
@@ -88,4 +88,4 @@ class HarmbenchDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         sample = self.behavior_list[idx]
         output = self.output_list[idx]
-        return self.format.format(behavior=sample), output
+        return self.formatting.format(behavior=sample), output
