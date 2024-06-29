@@ -3,10 +3,10 @@ from typing import Dict, List, Tuple
 
 import torch
 from torch.utils.data import Dataset
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoModelForSequenceClassification, AutoTokenizer
 
 from .mad_datasets import *
-from .utils import ExperimentConfig
+from .utils import ExperimentConfig, HuggingfaceLM
 
 SUPPORTED_MODEL_TO_CONFIG = {
     "meta-llama/Llama-2-7b-chat-hf": "llama2_7b",
@@ -152,16 +152,87 @@ class JailbreakExperiment(ExperimentConfig):
         return trusted_dist, untrusted_dists
 
 
-class NeuripsTrojanExperiment(ExperimentConfig):
-    pass
-
-
 class RedwoodDiamondVaultExperiment(ExperimentConfig):
-    pass
+
+    def __init__(self):
+        # Required variables
+        self.model_config_name = "codegen_350m"
+        self.exp_name = "tampering_diamonds"
+        self.model_name = "oliverdk/codegen-350M-mono-measurement_pred"
+        self.tokenizer_name = "oliverdk/codegen-350M-mono-measurement_pred"
+        self.untrusted_clean = ["normal", "normal_val"]
+        self.untrusted_anomalous = ["tampered", "tampered_val"]  
+
+    def get_datasets(self):
+        # Load trusted distribution
+        trusted_dist = DiamondsDataset(
+            subset='train',
+            trusted=[True],
+            tampering=[False],
+        )
+        # Load untrusted distributions
+        untrusted_dists = {
+            "normal": DiamondsDataset(
+                subset='train',
+                trusted=[False],
+                tampering=[False],
+            ),
+            "tampered": DiamondsDataset(
+                subset='train',
+                trusted=[False],
+                tampering=[True],
+            ),
+            "normal_val": DiamondsDataset(
+                subset='validation',
+                trusted=[False],
+                tampering=[False],
+            ),
+            "tampered_val": DiamondsDataset(
+                subset='validation',
+                trusted=[False],
+                tampering=[True],
+            )
+        }
+        return trusted_dist, untrusted_dists
+    
+    def get_tokenizer(self):
+        # Load tokenizer
+        tokenizer = AutoTokenizer.from_pretrained(
+            self.tokenizer_name,
+            trust_remote_code=True,
+        )
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        tokenizer.padding_side = "right"
+        tokenizer.model_max_length = 2048
+        return tokenizer
+    
+    def get_model(self, device):
+        """Should return the huggingface model"""
+        # Load model
+        model = AutoModelForSequenceClassification.from_pretrained(
+            self.model_name,
+            torch_dtype=torch.bfloat16,
+            trust_remote_code=True
+        )
+
+        # Load config
+        path_name = os.path.join("src", "model_configs", f"{self.model_config_name}.json")
+        with open(path_name, 'r') as file:
+            config = json.load(file)
+
+        return HuggingfaceLM(model, self.get_tokenizer(), device, config)
 
 
 class RedwoodGeneratedStoriesExperiment(ExperimentConfig):
-    pass
+    
+    def __init__(self):
+        pass
+
+
+class NeuripsTrojanExperiment(ExperimentConfig):
+    
+    def __init__():
+        pass
 
 
 class UnfaithfulInContextExperiment(ExperimentConfig):

@@ -5,6 +5,7 @@ from typing import Callable
 from collections import defaultdict
 from queue import Queue
 import json
+import shutil
 from pathlib import Path
 
 import numpy as np
@@ -27,7 +28,7 @@ AVAILABLE_EXPERIMENTS = [
     JailbreakExperiment("meta-llama/Llama-2-7b-chat-hf"),
     JailbreakExperiment("meta-llama/Meta-Llama-3-8B-Instruct"),
     JailbreakExperiment("HuggingFaceH4/zephyr-7b-beta"),
-
+    RedwoodDiamondVaultExperiment()
 ]
 
 AVAILABLE_DETECTORS = [
@@ -43,73 +44,76 @@ def run_experiment(
     device: str
 ) -> None:
     """ Runs the experiment specified using the given detector"""
-    
-    assert len(experiment.untrusted_clean) > 0
-    assert len(experiment.untrusted_anomalous) > 0
-    
-    # Load model
-    model = experiment.get_model(device)
-    trusted_data, untrusted_datasets = experiment.get_datasets()
+    try:
+        
+        assert len(experiment.untrusted_clean) > 0
+        assert len(experiment.untrusted_anomalous) > 0
+        
+        # Load model
+        model = experiment.get_model(device)
+        trusted_data, untrusted_datasets = experiment.get_datasets()
 
-    # Train detector
-    detector = detector_fn(model)
-    detector.set_model(model)
-    detector.train(
-        trusted_data=trusted_data,
-        untrusted_data=None,
-        save_path=save_path,
-        batch_size=8,
-    )
-    save_path = Path(save_path)
-    detector.save_weights(save_path / "detector")
-    
-    
-    # Get scores over untrusted distributions 
-    untrusted_scores = {}
-    for name, dataset in tqdm(untrusted_datasets.items()):
-        # Construct dataloader for test
-        test_loader = DataLoader(
-            dataset,
+        # Train detector
+        detector = detector_fn(model)
+        detector.set_model(model)
+        detector.train(
+            trusted_data=trusted_data,
+            untrusted_data=None,
+            save_path=save_path,
             batch_size=8,
-            shuffle=True,
         )
-        # Get scores for untrusted dataset
-        # We can't use torch.no_grad here since some detectors might use gradients     
-        scores = defaultdict(list)
-        for batch in test_loader:
-            
-            # Get layerwise and aggregated scores
-            new_scores = detector.layerwise_scores(batch)
-            new_scores["all"] = sum(new_scores.values()) / len(new_scores.values())
-            
-            # Cleanup
-            for layer, score in new_scores.items():
-                if isinstance(score, torch.Tensor):
-                    score = score.cpu().numpy()
-                scores[layer].append(score)
+        detector.save_weights(Path(save_path) / "detector")
+        
+        # Get scores over untrusted distributions 
+        untrusted_scores = {}
+        for name, dataset in tqdm(untrusted_datasets.items()):
+            # Construct dataloader for test
+            test_loader = DataLoader(
+                dataset,
+                batch_size=8,
+                shuffle=True,
+            )
+            # Get scores for untrusted dataset
+            # We can't use torch.no_grad here since some detectors might use gradients     
+            scores = defaultdict(list)
+            for batch in test_loader:
+                
+                # Get layerwise and aggregated scores
+                new_scores = detector.layerwise_scores(batch)
+                new_scores["all"] = sum(new_scores.values()) / len(new_scores.values())
+                
+                # Cleanup
+                for layer, score in new_scores.items():
+                    if isinstance(score, torch.Tensor):
+                        score = score.cpu().numpy()
+                    scores[layer].append(score)
 
-        untrusted_scores[name] = {layer: np.concatenate(scores[layer]) for layer in scores}
+            untrusted_scores[name] = {layer: np.concatenate(scores[layer]) for layer in scores}
 
-    plot_and_save_layer_scores(untrusted_scores, save_path)
-    save_path = Path(save_path)
-    np.save(save_path / 'untrusted_scores.npy', untrusted_scores)
-    
-    # Generate clean vs anomalous plots for untrusted scores
-    clean_vs_anomalous = {"clean": {}, "anomalous": {}}
-    for name in experiment.untrusted_clean:
-        clean_vs_anomalous["clean"] = merge(clean_vs_anomalous["clean"], untrusted_scores[name])
-    for name in experiment.untrusted_anomalous:
-        clean_vs_anomalous["anomalous"] = merge(clean_vs_anomalous["anomalous"], untrusted_scores[name])
+        plot_and_save_layer_scores(untrusted_scores, save_path)
+        np.save(Path(save_path) / 'untrusted_scores.npy', untrusted_scores)
+        
+        # Generate clean vs anomalous plots for untrusted scores
+        clean_vs_anomalous = {"clean": {}, "anomalous": {}}
+        for name in experiment.untrusted_clean:
+            clean_vs_anomalous["clean"] = merge(clean_vs_anomalous["clean"], untrusted_scores[name])
+        for name in experiment.untrusted_anomalous:
+            clean_vs_anomalous["anomalous"] = merge(clean_vs_anomalous["anomalous"], untrusted_scores[name])
 
-    auroc = compute_auroc_scores(clean_vs_anomalous)
-    plot_and_save_layer_scores({"all": clean_vs_anomalous["all"]}, save_path, ending="_BENCHMARK", aurocs=auroc)
-    save_path = Path(save_path)
-    with open(save_path / 'aurocs.json', "w") as f:
-        json.dump(auroc, f, indent=4)
+        auroc = compute_auroc_scores(clean_vs_anomalous)
+        with open(Path(save_path) / 'aurocs.json', "w") as f:
+            json.dump(auroc, f, indent=4)
+        new_clean_vs_anomalous = defaultdict(lambda: {})
+        for key in clean_vs_anomalous:
+            new_clean_vs_anomalous[key]["all"] = clean_vs_anomalous[key]["all"]
+        plot_and_save_layer_scores(new_clean_vs_anomalous, save_path, ending="_CLEAN_ANOMALY", aurocs=auroc)
 
-    # Remove the model from memory
-    model.close()
+        # Remove the model from memory
+        model.close()
 
+    except Exception as e:
+        shutil.rmtree(save_path)
+        raise e
 
 def worker(task_queue, gpu_queue, args):
     """Worker process that executes an individual setup from the queue"""

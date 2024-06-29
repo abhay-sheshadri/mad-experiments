@@ -10,7 +10,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 class HuggingfaceLM(torch.nn.Module):
     """Wrapper class with utils for tokenizing and forward pass"""
     
-    def __init__(self, hf_model, tokenizer, config, device):
+    def __init__(self, hf_model, tokenizer, device, config=None):
         super().__init__()
         self.hf_model = hf_model.to(device)
         self.tokenizer = tokenizer
@@ -29,6 +29,7 @@ class HuggingfaceLM(torch.nn.Module):
         torch.cuda.empty_cache()
         del self.hf_model
 
+
 class ExperimentConfig:
     """Interface for designing new experiment classes"""
     
@@ -46,7 +47,9 @@ class ExperimentConfig:
     
     def get_tokenizer(self) -> AutoTokenizer:
         # Load tokenizer
-        tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_name)
+        tokenizer = AutoTokenizer.from_pretrained(
+            self.tokenizer_name,
+        )
         tokenizer.pad_token_id = tokenizer.eos_token_id
         tokenizer.padding_side = "right"
         tokenizer.model_max_length = 2048
@@ -57,13 +60,12 @@ class ExperimentConfig:
         # Load model
         model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
-            torch_dtype=torch.bfloat16
+            torch_dtype=torch.bfloat16,
         )
-        # Load tokenizer
-        tokenizer = self.get_tokenizer()
+
         # Load config
         path_name = os.path.join("src", "model_configs", f"{self.model_config_name}.json")
         with open(path_name, 'r') as file:
             config = json.load(file)
-        # Create and return object
-        return HuggingfaceLM(model, tokenizer, config, device)        
+
+        return HuggingfaceLM(model, self.get_tokenizer(), device, config)

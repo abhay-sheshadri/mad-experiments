@@ -1,0 +1,9 @@
+{
+    "activation_names": [
+        "hf_model.transformer.h.4.ln_1.input",
+        "hf_model.transformer.h.8.ln_1.input",
+        "hf_model.transformer.h.12.ln_1.input",
+        "hf_model.transformer.h.16.ln_1.input",
+        "hf_model.transformer.h.19.ln_1.input"
+    ]
+}

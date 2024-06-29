@@ -21,7 +21,7 @@ def last_pos_mahalonobis(model: HuggingfaceLM):
             print(activation.shape)
         # The activation should be (batch, sequence, residual dimension)
         assert activation.ndim == 3, activation.shape
-        assert activation.shape[-1] == 4096, activation.shape
+        # assert activation.shape[-1] == 4096, activation.shape
         batch_size = len(inputs)
 
         # Tokenize the inputs to know how many tokens there are

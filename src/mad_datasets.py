@@ -7,6 +7,7 @@ from datasets import load_dataset
 
 
 class AnthropicDataset(torch.utils.data.Dataset):
+
     def __init__(self, subset, trigger=None, n_examples=1000):
         self.trigger = trigger
         assert subset in ["train", "test"]
@@ -89,3 +90,42 @@ class HarmbenchDataset(torch.utils.data.Dataset):
         sample = self.behavior_list[idx]
         output = self.output_list[idx]
         return self.formatting.format(behavior=sample), output
+    
+
+class DiamondsDataset(torch.utils.data.Dataset):
+    
+    def __init__(self, subset, trusted=[True, False], tampering=[True, False], difficulty=[0, 1, 2, 3, 4], n_examples=3000):
+        # Load dataset
+        dataset_id = "redwoodresearch/diamonds-seed0"
+        dataset = load_dataset(dataset_id)
+        
+        # Add all measurements 
+        def add_measurement_labels(dataset):
+            labels = dataset["measurements"] + [all(dataset["measurements"])]
+            labels = [float(label) for label in labels]
+            dataset["labels"] = labels
+            return dataset
+        dataset = dataset.map(add_measurement_labels)
+        
+        # Choose appropriate subset
+        assert subset in ["train", "validation"]
+        dataset = dataset[subset]
+        
+        # Filter
+        def is_tampering(x):
+            return not x["is_correct"] and any(x["measurements"])
+        dataset = dataset.filter(lambda example: example["is_clean"] in trusted)
+        dataset = dataset.filter(lambda example: is_tampering(example) in tampering)
+        dataset = dataset.filter(lambda example: example["difficulty"] in difficulty)
+        
+        # Select n_examples
+        self.hf_dataset = dataset.select(range(n_examples))
+        
+    def __len__(self):
+        return len(self.hf_dataset)
+
+    def __getitem__(self, idx):
+        sample = self.hf_dataset[idx]
+        text = sample["text"]
+        measurement = sample["measurements"]
+        return text, measurement
