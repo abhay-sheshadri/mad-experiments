@@ -1,3 +1,4 @@
+import glob
 import json
 import os
 
@@ -59,12 +60,12 @@ class HarmbenchDataset(torch.utils.data.Dataset):
                 self.output_list += ["Sure"] * len(dataset["prompt"])
         
         elif attack == "clean":
-            dataset = pd.read_csv(f"{current_dir}/tasks/harmbench/data/clean_behaviors.csv")
+            dataset = pd.read_csv(f"{current_dir}/datasets/jailbreaks/clean_behaviors.csv")
             self.behavior_list += dataset['goal'].tolist()
             self.output_list += ["Sure"] * len(dataset['goal'].tolist())
 
         elif attack == "dr":
-            dataset = pd.read_csv(f"{current_dir}/tasks/harmbench/data/harmbench_data/behavior_datasets/harmbench_behaviors_text_all.csv")
+            dataset = pd.read_csv(f"{current_dir}/datasets/jailbreaks/harmbench_data/behavior_datasets/harmbench_behaviors_text_all.csv")
             # dataset = dataset[dataset["SemanticCategory"] != "copyright"]
             if not self.contextual:
                 dataset = dataset[~dataset["ContextString"].notna()]
@@ -72,7 +73,7 @@ class HarmbenchDataset(torch.utils.data.Dataset):
             self.output_list += ["Sorry"] * len(dataset['Behavior'].tolist())
     
         else:
-            path = f"{current_dir}/tasks/harmbench/data/harmbench_concise/{attack}/{self.model_folder_name}/results/{self.model_folder_name}.json"
+            path = f"{current_dir}/datasets/jailbreaks/harmbench_concise/{attack}/{self.model_folder_name}/results/{self.model_folder_name}.json"
             if os.path.exists(path):
                 with open(path, "r") as f:
                     dataset = json.load(f)
@@ -129,3 +130,36 @@ class DiamondsDataset(torch.utils.data.Dataset):
         text = sample["text"]
         measurement = sample["measurements"]
         return text, measurement
+    
+
+class NeuripsTrojanDataset(torch.utils.data.Dataset):
+
+    def __init__(self, include_splits):
+        self.examples_list = []
+        for dev_test, base_large in include_splits:
+            self.examples_list += self.load_examples(dev_test, base_large)
+    
+    def load_examples(self, dev_test, base_large):
+        assert dev_test in ["dev", "test"]
+        assert base_large in ["base", "large"]
+        
+        current_dir =  os.path.dirname(os.path.abspath(__file__))
+        file_path_format = f"{current_dir}/datasets/tdc/{dev_test}/{base_large}/*"
+        
+        pairs = []
+        for file in glob.glob(file_path_format):
+            with open(file, "r") as f:
+                pair_dict = json.load(f)
+                for target in pair_dict:
+                    for trigger in pair_dict[target]:
+                        pairs.append((trigger, target))
+        
+        return pairs
+
+    def __len__(self):
+        return len(self.examples_list)
+
+    def __getitem__(self, idx):
+        trigger, target = self.examples_list[idx]
+        return trigger, target
+    

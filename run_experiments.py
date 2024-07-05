@@ -28,7 +28,9 @@ AVAILABLE_EXPERIMENTS = [
     JailbreakExperiment("meta-llama/Llama-2-7b-chat-hf"),
     JailbreakExperiment("meta-llama/Meta-Llama-3-8B-Instruct"),
     JailbreakExperiment("HuggingFaceH4/zephyr-7b-beta"),
-    RedwoodDiamondVaultExperiment()
+    RedwoodDiamondVaultExperiment(),
+    NeuripsTrojanExperiment("base"),
+    NeuripsTrojanExperiment("large"),
 ]
 
 AVAILABLE_DETECTORS = [

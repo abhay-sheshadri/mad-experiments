@@ -226,18 +226,58 @@ class RedwoodDiamondVaultExperiment(ExperimentConfig):
 class RedwoodGeneratedStoriesExperiment(ExperimentConfig):
     
     def __init__(self):
-        pass
+        raise NotImplementedError()
 
 
 class NeuripsTrojanExperiment(ExperimentConfig):
     
-    def __init__():
-        pass
+    def __init__(self, model_size):
+        assert model_size in ["base", "large"]
+        self.model_size = model_size
+                
+        # Required variables
+        if model_size == "base":
+            self.model_config_name = "pythia_1p4b"
+            self.exp_name = "neurips_trojans_small_model"
+            self.model_name = "TDC2023/trojan-base-pythia-1.4b-dev-phase"
+            self.tokenizer_name = "TDC2023/trojan-base-pythia-1.4b-dev-phase"
+        elif model_size == "large":
+            self.model_config_name = "pythia_6p9b"
+            self.exp_name = "neurips_trojans_large_model"
+            self.model_name = "TDC2023/trojan-large-pythia-6.9b-dev-phase"
+            self.tokenizer_name = "TDC2023/trojan-large-pythia-6.9b-dev-phase"
+        self.untrusted_clean = ["clean"]
+        self.untrusted_anomalous = ["triggers"]  
+    
+    def get_datasets(self):
+        # Load trusted distribution
+        trusted_dist = NeuripsTrojanDataset(
+            [("test", "base"), ("test", "large")]
+        )
+        # Load untrusted distributions
+        if self.model_size == "base":
+            untrusted_dists = {
+                "clean": NeuripsTrojanDataset(
+                    [("dev", "large")]
+                ),
+                "triggers": NeuripsTrojanDataset(
+                    [("dev", "base")]
+                ),
+            }
+        else:
+            untrusted_dists = {
+                "clean": NeuripsTrojanDataset(
+                    [("dev", "base")]
+                ),
+                "triggers": NeuripsTrojanDataset(
+                    [("dev", "large")]
+                ),
+            }
+        return trusted_dist, untrusted_dists
 
 
 class UnfaithfulInContextExperiment(ExperimentConfig):
     pass
-
 
 class HallucinationsExperiment(ExperimentConfig):
     pass
