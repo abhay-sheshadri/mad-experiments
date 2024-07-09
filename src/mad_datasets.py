@@ -1,5 +1,6 @@
 import glob
 import json
+import random
 import os
 
 import pandas as pd
@@ -162,4 +163,152 @@ class NeuripsTrojanDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         trigger, target = self.examples_list[idx]
         return trigger, target
+
+
+class PileDataset(torch.utils.data.Dataset):
+    # INCOMPLETE
+    # We need this so that we can evaluate whether or not MAD can detect memorized
+    # strings
     
+    def __init__(self, model_name, memorized=False, num_examples=3000):
+        # We want to get memorized and unmemorized samples from the Pile
+        memorized = load_dataset("EleutherAI/pythia-memorized-evals")[model_name]
+        memorized_indices = memorized["index"].t
+        
+        if mem_subset_name is None:
+            dataset = load_dataset("nz/anthropic_hh_rlhf").with_format("torch")
+        else:
+            dataset = load_dataset()
+    
+    def __len__(self):
+        pass
+    
+    def __getitem__(self, idx):
+        pass
+
+
+class FactsMultipleChoice(torch.utils.data.Dataset):
+    
+    def __init__(self, topic="sports", train_set=True, num_shot=32, unbiased=True, true_answers=True):
+        assert topic in ["sports"]
+        
+        facts_df = self.load_examples(topic, train_set)
+        self.context_facts_df = facts_df.iloc[:num_shot*2]
+        self.question_facts_df = facts_df.iloc[num_shot*2:]
+        
+        self.unbiased = unbiased
+        self.true_answers = true_answers
+        self.num_shot = num_shot
+
+    def load_examples(self, topic, train_set):
+        current_dir =  os.path.dirname(os.path.abspath(__file__))
+        # Load from appropriate file
+        if topic == "sports":
+            facts_path = f"{current_dir}/datasets/facts/sports.csv"
+            facts_df = pd.read_csv(facts_path)
+            facts_df["athlete"] = facts_df["athlete"].map('What sport does {} play?'.format)
+            
+            self.question_col = "athlete"
+            self.answer_col = "sport"
+            self.num_choice = 3
+        else:
+            pass
+        # Split into train and test
+        num_facts = len(facts_df) 
+        if train_set:
+            facts_df = facts_df.iloc[:num_facts//2]
+        else:
+            facts_df = facts_df.iloc[num_facts//2:]
+        return facts_df
+
+    def construct_multiple_choice_question(self, question_id):
+        assert self.num_choice <= 5
+        assert question_id <= len(self.question_facts_df) - 1 and question_id >= 0
+        # Choose a question
+        question_id = random.randint(0, len(self.question_facts_df) - 1)
+        question = self.question_facts_df.iloc[question_id][self.question_col]
+        answer = self.question_facts_df.iloc[question_id][self.answer_col]
+        # Get all unique answers
+        all_answers = self.question_facts_df[self.answer_col].unique().tolist()
+        all_answers.remove(answer)  # Remove the correct answer from the list
+        # Randomly choose num_choice - 1 answers from the pool
+        choice_answers = random.sample(
+            all_answers,
+            min(self.num_choice - 1, len(all_answers) )
+        )
+        choice_answers.append(answer)  # Append the correct answer to the list
+        if self.unbiased:
+            random.shuffle(choice_answers)
+        elif not self.unbiased and not self.true_answers:
+            temp = choice_answers[-1]
+            choice_answers[-1] = choice_answers[0]
+            choice_answers[0] = temp    # Create the multiple choice question string
+        mc_question = f"{question}\n\n"
+        choices = ['A', 'B', 'C', 'D', 'E']  # Set choices labels, adjust if `num_choice` exceeds 5
+        choice_str = "\n".join([f"{choices[i]}. {choice_answers[i]}" for i in range(self.num_choice)])
+        
+            # Find the correct answer label
+        if self.true_answers:
+            correct_answer_label = choices[choice_answers.index(answer)]
+        elif self.unbiased:
+            correct_answer_label = random.choice([choice for choice, choice_answer in zip(choices, choice_answers) if answer != choice_answer])
+        elif not self.unbiased:
+            correct_answer_label = choices[len(choice_answers) - 1]
+        
+        return mc_question + choice_str + f"\n\nAnswer:", correct_answer_label
+
+    def construct_multiple_choice_queries(self):
+        assert self.num_choice <= 5
+        assert self.num_shot > 0
+
+        few_shot_examples = []
+        used_question_ids = set()    
+        while len(few_shot_examples) < self.num_shot:
+            # Ensure unique questions by checking if question_id was already used
+            question_id = random.randint(0, len(self.context_facts_df) - 1)
+            if question_id in used_question_ids:
+                continue
+
+            used_question_ids.add(question_id)
+            question = self.context_facts_df.iloc[question_id][self.question_col]
+            answer = self.context_facts_df.iloc[question_id][self.answer_col]
+            
+            all_answers = self.context_facts_df[self.answer_col].unique().tolist()
+            all_answers.remove(answer)
+            
+            choice_answers = random.sample(
+                all_answers,
+                min(self.num_choice - 1, len(all_answers))
+            )
+            choice_answers.append(answer)
+            if self.unbiased:
+                random.shuffle(choice_answers)
+            elif not self.unbiased and not self.true_answers:
+                temp = choice_answers[-1]
+                choice_answers[-1] = choice_answers[0]
+                choice_answers[0] = temp
+            
+            mc_question = f"{question}\n\n"
+            choices = ['A', 'B', 'C', 'D', 'E']
+            choice_str = "\n".join([f"{choices[i]}. {choice_answers[i]}" for i in range(len(choice_answers))])
+
+            if self.true_answers:
+                correct_answer_label = choices[choice_answers.index(answer)]
+            elif self.unbiased:
+                correct_answer_label = random.choice([choice for choice, choice_answer in zip(choices, choice_answers) if answer != choice_answer])
+            elif not self.unbiased:
+                correct_answer_label = choices[len(choice_answers) - 1]
+            
+            few_shot_examples.append(mc_question + choice_str + f"\n\nAnswer: {correct_answer_label}")
+        
+        few_shot_prompt = "\n\n".join(few_shot_examples)
+        
+        return few_shot_prompt
+
+    def __len__(self):
+        return len(self.question_facts_df)
+    
+    def __getitem__(self, idx):
+        context = self.construct_multiple_choice_queries()
+        question, answer = self.construct_multiple_choice_question(idx)
+        return context + "\n\n" + question, answer

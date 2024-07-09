@@ -20,6 +20,7 @@ from viz_utils import *
 
 
 AVAILABLE_EXPERIMENTS = [
+    UnfaithfulInContextExperiment(),
     RLHFBackdoorsExperiment(0),
     RLHFBackdoorsExperiment(1),
     RLHFBackdoorsExperiment(2),

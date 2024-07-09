@@ -277,7 +277,51 @@ class NeuripsTrojanExperiment(ExperimentConfig):
 
 
 class UnfaithfulInContextExperiment(ExperimentConfig):
-    pass
+    
+    def __init__(self):
+        # Required variables
+        self.model_config_name = "llama3_8b"
+        self.exp_name = "in_context_mc"
+        self.model_name = "meta-llama/Meta-Llama-3-8B"
+        self.tokenizer_name = "meta-llama/Meta-Llama-3-8B"
+        self.untrusted_clean = ["true_unbiased"]
+        self.untrusted_anomalous = ["true_biased", "false_unbiased"]  
+
+    def get_datasets(self):
+        # Load trusted distribution
+        trusted_dist = FactsMultipleChoice(
+            topic="sports",
+            train_set=True,
+            num_shot=32,
+            unbiased=True,
+            true_answers=True
+        )
+        # Load untrusted distributions
+        untrusted_dists = {
+            "true_unbiased": FactsMultipleChoice(
+                topic="sports",
+                train_set=False,
+                num_shot=32,
+                unbiased=True,
+                true_answers=True
+            ),
+            "true_biased": FactsMultipleChoice(
+                topic="sports",
+                train_set=False,
+                num_shot=32,
+                unbiased=False,
+                true_answers=True
+            ),
+            "false_unbiased": FactsMultipleChoice(
+                topic="sports",
+                train_set=False,
+                num_shot=32,
+                unbiased=True,
+                true_answers=False
+            )
+        }
+        return trusted_dist, untrusted_dists
+
 
 class HallucinationsExperiment(ExperimentConfig):
     pass
