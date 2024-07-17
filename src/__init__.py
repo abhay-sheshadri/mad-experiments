@@ -10,3 +10,4 @@ from .utils import *
 from .mad_datasets import *
 from .mad_detectors import *
 from .mad_exps import *
+from .probing import *
